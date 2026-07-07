@@ -1,16 +1,10 @@
 import json
-import os
 import re
-import time
 
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-
-
-load_dotenv()
-
-MODEL = "gemini-3.5-flash"
+from ai_engine.gemini_client import (
+    GeminiError,
+    generate_json,
+)
 
 
 CRITIC_SYSTEM_PROMPT = """
@@ -64,6 +58,41 @@ Return ONLY valid JSON.
 """
 
 
+VALID_DECISIONS = {
+    "APPROVE",
+    "REVISE",
+    "REJECT"
+}
+
+
+VALID_SEVERITIES = {
+    "low",
+    "medium",
+    "high"
+}
+
+
+VALID_ISSUE_CATEGORIES = {
+    "topic_drift",
+    "generic_language",
+    "technical_accuracy",
+    "unsupported_claim",
+    "repetition",
+    "narrative_gap",
+    "audience_mismatch"
+}
+
+
+REQUIRED_DIMENSIONS = {
+    "topic_relevance",
+    "narrative_flow",
+    "specificity",
+    "technical_care",
+    "audience_fit",
+    "non_generic_language"
+}
+
+
 def _extract_json(text: str) -> dict:
     cleaned = re.sub(
         r"^```(?:json)?|```$",
@@ -75,20 +104,289 @@ def _extract_json(text: str) -> dict:
     return json.loads(cleaned)
 
 
+def _validate_critic_input(
+    topic_analysis: dict,
+    storyline: dict
+) -> None:
+
+    if not isinstance(
+        topic_analysis,
+        dict
+    ):
+        raise TypeError(
+            "topic_analysis must be a dictionary."
+        )
+
+    if not isinstance(
+        storyline,
+        dict
+    ):
+        raise TypeError(
+            "storyline must be a dictionary."
+        )
+
+    required_analysis_fields = [
+        "topic",
+        "core_question"
+    ]
+
+    missing_analysis_fields = [
+        field
+        for field in required_analysis_fields
+        if field not in topic_analysis
+    ]
+
+    if missing_analysis_fields:
+        raise ValueError(
+            "PPT Critic received incomplete topic analysis. "
+            f"Missing fields: {missing_analysis_fields}"
+        )
+
+    required_storyline_fields = [
+        "topic",
+        "narrative_thesis",
+        "story_arc",
+        "slides"
+    ]
+
+    missing_storyline_fields = [
+        field
+        for field in required_storyline_fields
+        if field not in storyline
+    ]
+
+    if missing_storyline_fields:
+        raise ValueError(
+            "PPT Critic received incomplete storyline. "
+            f"Missing fields: {missing_storyline_fields}"
+        )
+
+    if not isinstance(
+        storyline["slides"],
+        list
+    ):
+        raise TypeError(
+            "storyline slides must be a list."
+        )
+
+
+def _validate_score(
+    score,
+    field_name: str
+) -> None:
+
+    if isinstance(score, bool) or not isinstance(
+        score,
+        (int, float)
+    ):
+        raise RuntimeError(
+            f"{field_name} must be a numeric score."
+        )
+
+    if not 0 <= score <= 10:
+        raise RuntimeError(
+            f"{field_name} must be between 0 and 10."
+        )
+
+
+def _validate_critique(
+    critique: dict
+) -> None:
+
+    required_fields = [
+        "overall_score",
+        "decision",
+        "dimension_scores",
+        "strengths",
+        "issues",
+        "banned_phrases_detected",
+        "claims_needing_qualification",
+        "duplicate_functions",
+        "revision_priority"
+    ]
+
+    missing_fields = [
+        field
+        for field in required_fields
+        if field not in critique
+    ]
+
+    if missing_fields:
+        raise RuntimeError(
+            "PPT Critic returned invalid JSON. "
+            f"Missing fields: {missing_fields}"
+        )
+
+    _validate_score(
+        critique["overall_score"],
+        "overall_score"
+    )
+
+    if critique["decision"] not in VALID_DECISIONS:
+        raise RuntimeError(
+            "PPT Critic returned invalid decision: "
+            f"{critique['decision']}"
+        )
+
+    if not isinstance(
+        critique["dimension_scores"],
+        dict
+    ):
+        raise RuntimeError(
+            "dimension_scores must be an object."
+        )
+
+    actual_dimensions = set(
+        critique["dimension_scores"].keys()
+    )
+
+    missing_dimensions = (
+        REQUIRED_DIMENSIONS - actual_dimensions
+    )
+
+    if missing_dimensions:
+        raise RuntimeError(
+            "PPT Critic returned incomplete "
+            "dimension scores. "
+            f"Missing dimensions: "
+            f"{sorted(missing_dimensions)}"
+        )
+
+    for dimension in REQUIRED_DIMENSIONS:
+        _validate_score(
+            critique["dimension_scores"][dimension],
+            f"dimension_scores.{dimension}"
+        )
+
+    list_fields = [
+        "strengths",
+        "issues",
+        "banned_phrases_detected",
+        "claims_needing_qualification",
+        "duplicate_functions",
+        "revision_priority"
+    ]
+
+    for field in list_fields:
+        if not isinstance(
+            critique[field],
+            list
+        ):
+            raise RuntimeError(
+                f"{field} must be a list."
+            )
+
+    for issue in critique["issues"]:
+        if not isinstance(
+            issue,
+            dict
+        ):
+            raise RuntimeError(
+                "Every critic issue must be an object."
+            )
+
+        required_issue_fields = [
+            "severity",
+            "slide_number",
+            "category",
+            "problem",
+            "why_it_matters",
+            "revision_instruction"
+        ]
+
+        missing_issue_fields = [
+            field
+            for field in required_issue_fields
+            if field not in issue
+        ]
+
+        if missing_issue_fields:
+            raise RuntimeError(
+                "PPT Critic returned an incomplete issue. "
+                f"Missing fields: {missing_issue_fields}"
+            )
+
+        if issue["severity"] not in VALID_SEVERITIES:
+            raise RuntimeError(
+                "PPT Critic returned invalid severity: "
+                f"{issue['severity']}"
+            )
+
+        if (
+            issue["category"]
+            not in VALID_ISSUE_CATEGORIES
+        ):
+            raise RuntimeError(
+                "PPT Critic returned invalid issue category: "
+                f"{issue['category']}"
+            )
+
+    _validate_decision_consistency(
+        critique
+    )
+
+def _validate_decision_consistency(
+    critique: dict
+) -> None:
+
+    score = critique["overall_score"]
+    decision = critique["decision"]
+
+    has_high_severity_issue = any(
+        issue["severity"] == "high"
+        for issue in critique["issues"]
+    )
+
+    has_banned_phrases = bool(
+        critique["banned_phrases_detected"]
+    )
+
+    has_major_topic_drift = any(
+        issue["severity"] == "high"
+        and issue["category"] == "topic_drift"
+        for issue in critique["issues"]
+    )
+
+    if decision == "APPROVE":
+        if (
+            score < 8
+            or has_high_severity_issue
+            or has_banned_phrases
+        ):
+            raise RuntimeError(
+                "PPT Critic returned an inconsistent "
+                "APPROVE decision."
+            )
+
+    elif decision == "REJECT":
+        if (
+            score >= 5
+            and not has_major_topic_drift
+        ):
+            raise RuntimeError(
+                "PPT Critic returned an inconsistent "
+                "REJECT decision."
+            )
+
+    elif decision == "REVISE":
+        if (
+            score < 5
+            or has_major_topic_drift
+        ):
+            raise RuntimeError(
+                "PPT Critic returned an inconsistent "
+                "REVISE decision."
+            )
+
+
 def critique_storyline(
     topic_analysis: dict,
     storyline: dict
 ) -> dict:
 
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is missing from .env file."
-        )
-
-    client = genai.Client(
-        api_key=api_key
+    _validate_critic_input(
+        topic_analysis,
+        storyline
     )
 
     analysis_json = json.dumps(
@@ -206,108 +504,21 @@ IMPORTANT:
             "[PPT CRITIC] Evaluating storyline..."
         )
 
-        max_retries = 4
-        response = None
-
-        for attempt in range(
-            1,
-            max_retries + 1
-        ):
-            try:
-                print(
-                    f"[PPT CRITIC] API attempt "
-                    f"{attempt}/{max_retries}"
-                )
-
-                response = client.models.generate_content(
-                    model=MODEL,
-                    contents=user_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=CRITIC_SYSTEM_PROMPT,
-                        response_mime_type="application/json",
-                        temperature=0.1,
-                        max_output_tokens=3500
-                    )
-                )
-
-                break
-
-            except Exception as api_error:
-                error_text = str(api_error)
-
-                temporary_error = (
-                    "503" in error_text
-                    or "UNAVAILABLE" in error_text
-                    or "high demand" in error_text.lower()
-                    or "429" in error_text
-                    or "RESOURCE_EXHAUSTED" in error_text
-                )
-
-                if (
-                    not temporary_error
-                    or attempt == max_retries
-                ):
-                    raise
-
-                wait_seconds = 5 * attempt
-
-                print(
-                    "[PPT CRITIC] "
-                    f"Temporary Gemini error. "
-                    f"Retrying in {wait_seconds} seconds..."
-                )
-
-                time.sleep(wait_seconds)
-
-        if response is None:
-            raise RuntimeError(
-                "PPT Critic did not receive a response."
-            )
-
-        if not response.text:
-            raise RuntimeError(
-                "PPT Critic returned an empty response."
-            )
-
-        critique = _extract_json(
-            response.text
+        response_text = generate_json(
+            system_prompt=CRITIC_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.1,
+            max_output_tokens=3500,
+            caller_name="PPT CRITIC"
         )
 
-        required_fields = [
-            "overall_score",
-            "decision",
-            "dimension_scores",
-            "strengths",
-            "issues",
-            "banned_phrases_detected",
-            "claims_needing_qualification",
-            "duplicate_functions",
-            "revision_priority"
-        ]
+        critique = _extract_json(
+            response_text
+        )
 
-        missing_fields = [
-            field
-            for field in required_fields
-            if field not in critique
-        ]
-
-        if missing_fields:
-            raise RuntimeError(
-                "PPT Critic returned invalid JSON. "
-                f"Missing fields: {missing_fields}"
-            )
-
-        valid_decisions = {
-            "APPROVE",
-            "REVISE",
-            "REJECT"
-        }
-
-        if critique["decision"] not in valid_decisions:
-            raise RuntimeError(
-                "PPT Critic returned invalid decision: "
-                f"{critique['decision']}"
-            )
+        _validate_critique(
+            critique
+        )
 
         print(
             "[PPT CRITIC] "
@@ -320,6 +531,14 @@ IMPORTANT:
         )
 
         return critique
+
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "PPT Critic returned malformed JSON."
+        ) from error
+
+    except GeminiError:
+        raise
 
     except Exception as error:
         print(
