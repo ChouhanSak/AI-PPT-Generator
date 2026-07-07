@@ -1,16 +1,10 @@
 import json
-import os
 import re
-import time
 
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-
-
-load_dotenv()
-
-MODEL = "gemini-3.5-flash"
+from ai_engine.gemini_client import (
+    GeminiError,
+    generate_json,
+)
 
 
 STORYLINE_REVISER_PROMPT = """
@@ -57,6 +51,29 @@ Return ONLY valid JSON.
 """
 
 
+REQUIRED_SLIDE_FIELDS = {
+    "slide_number",
+    "role",
+    "purpose",
+    "core_message",
+    "concepts_used",
+    "transition_to_next"
+}
+ALLOWED_SLIDE_ROLES = {
+    "opening",
+    "define",
+    "explain_mechanism",
+    "classify",
+    "compare",
+    "trace_evolution",
+    "analyze_application",
+    "examine_limitations",
+    "evaluate",
+    "connect_concepts",
+    "synthesis"
+}
+
+
 def _extract_json(text: str) -> dict:
     cleaned = re.sub(
         r"^```(?:json)?|```$",
@@ -68,29 +85,306 @@ def _extract_json(text: str) -> dict:
     return json.loads(cleaned)
 
 
+def _validate_reviser_input(
+    topic_analysis: dict,
+    storyline: dict,
+    critique: dict
+) -> None:
+
+    if not isinstance(topic_analysis, dict):
+        raise TypeError(
+            "topic_analysis must be a dictionary."
+        )
+
+    if not isinstance(storyline, dict):
+        raise TypeError(
+            "storyline must be a dictionary."
+        )
+
+    if not isinstance(critique, dict):
+        raise TypeError(
+            "critique must be a dictionary."
+        )
+
+    required_analysis_fields = [
+        "topic",
+        "core_question"
+    ]
+
+    missing_analysis_fields = [
+        field
+        for field in required_analysis_fields
+        if field not in topic_analysis
+    ]
+
+    if missing_analysis_fields:
+        raise ValueError(
+            "Storyline Reviser received incomplete "
+            "topic analysis. "
+            f"Missing fields: {missing_analysis_fields}"
+        )
+
+    required_storyline_fields = [
+        "topic",
+        "total_slides",
+        "narrative_thesis",
+        "story_arc",
+        "slides"
+    ]
+
+    missing_storyline_fields = [
+        field
+        for field in required_storyline_fields
+        if field not in storyline
+    ]
+
+    if missing_storyline_fields:
+        raise ValueError(
+            "Storyline Reviser received incomplete storyline. "
+            f"Missing fields: {missing_storyline_fields}"
+        )
+
+    if (
+        isinstance(storyline["total_slides"], bool)
+        or not isinstance(
+            storyline["total_slides"],
+            int
+        )
+    ):
+        raise TypeError(
+            "storyline total_slides must be an integer."
+        )
+
+    if storyline["total_slides"] < 3:
+        raise ValueError(
+            "Storyline must contain at least 3 total slides."
+        )
+
+    if not isinstance(
+        storyline["slides"],
+        list
+    ):
+        raise TypeError(
+            "storyline slides must be a list."
+        )
+
+    if (
+        len(storyline["slides"])
+        != storyline["total_slides"]
+    ):
+        raise ValueError(
+            "Input storyline slide count is inconsistent. "
+            f"Expected {storyline['total_slides']}, "
+            f"received {len(storyline['slides'])}."
+        )
+
+    required_critique_fields = [
+        "decision",
+        "issues",
+        "banned_phrases_detected",
+        "claims_needing_qualification",
+        "revision_priority"
+    ]
+
+    missing_critique_fields = [
+        field
+        for field in required_critique_fields
+        if field not in critique
+    ]
+
+    if missing_critique_fields:
+        raise ValueError(
+            "Storyline Reviser received incomplete critique. "
+            f"Missing fields: {missing_critique_fields}"
+        )
+
+    critique_list_fields = [
+        "issues",
+        "banned_phrases_detected",
+        "claims_needing_qualification",
+        "revision_priority"
+    ]
+
+    for field in critique_list_fields:
+        if not isinstance(
+            critique[field],
+            list
+        ):
+            raise TypeError(
+                f"critique {field} must be a list."
+            )
+
+
+def _validate_revised_storyline(
+    revised_storyline: dict,
+    original_storyline: dict
+) -> None:
+
+    required_fields = [
+        "topic",
+        "total_slides",
+        "narrative_thesis",
+        "story_arc",
+        "revision_summary",
+        "slides"
+    ]
+
+    missing_fields = [
+        field
+        for field in required_fields
+        if field not in revised_storyline
+    ]
+
+    if missing_fields:
+        raise RuntimeError(
+            "Storyline Reviser returned invalid JSON. "
+            f"Missing fields: {missing_fields}"
+        )
+
+    original_topic = original_storyline["topic"]
+    revised_topic = revised_storyline["topic"]
+
+    if revised_topic != original_topic:
+        raise RuntimeError(
+            "Storyline Reviser changed the presentation topic. "
+            f"Expected '{original_topic}', "
+            f"received '{revised_topic}'."
+        )
+
+    total_slides = original_storyline["total_slides"]
+
+    if (
+        revised_storyline["total_slides"]
+        != total_slides
+    ):
+        raise RuntimeError(
+            "Storyline Reviser changed total_slides. "
+            f"Expected {total_slides}, "
+            f"received "
+            f"{revised_storyline['total_slides']}."
+        )
+
+    if not isinstance(
+        revised_storyline["revision_summary"],
+        list
+    ):
+        raise RuntimeError(
+            "revision_summary must be a list."
+        )
+
+    slides = revised_storyline["slides"]
+
+    if not isinstance(slides, list):
+        raise RuntimeError(
+            "Storyline Reviser returned invalid slides."
+        )
+
+    if len(slides) != total_slides:
+        raise RuntimeError(
+            "Storyline Reviser violated slide count. "
+            f"Expected {total_slides}, "
+            f"received {len(slides)}."
+        )
+
+    expected_numbers = list(
+        range(
+            1,
+            total_slides + 1
+        )
+    )
+
+    actual_numbers = [
+        slide.get("slide_number")
+        if isinstance(slide, dict)
+        else None
+        for slide in slides
+    ]
+
+    if actual_numbers != expected_numbers:
+        raise RuntimeError(
+            "Storyline Reviser returned invalid numbering. "
+            f"Expected {expected_numbers}, "
+            f"received {actual_numbers}."
+        )
+
+    for slide in slides:
+        if not isinstance(slide, dict):
+            raise RuntimeError(
+                "Every revised slide must be an object."
+            )
+
+        missing_slide_fields = (
+            REQUIRED_SLIDE_FIELDS
+            - set(slide.keys())
+        )
+        if slide["role"] not in ALLOWED_SLIDE_ROLES:
+            raise RuntimeError(
+                "Storyline Reviser returned an invalid slide role. "
+                f"Slide {slide['slide_number']} "
+                f"has role '{slide['role']}'."
+            )
+
+        if missing_slide_fields:
+            raise RuntimeError(
+                "Storyline Reviser returned an incomplete slide. "
+                f"Slide {slide.get('slide_number')} "
+                f"is missing fields: "
+                f"{sorted(missing_slide_fields)}"
+            )
+
+        if not isinstance(
+            slide["concepts_used"],
+            list
+        ):
+            raise RuntimeError(
+                "concepts_used must be a list on "
+                f"slide {slide['slide_number']}."
+            )
+
+        text_fields = [
+            "role",
+            "purpose",
+            "core_message",
+            "transition_to_next"
+        ]
+
+        for field in text_fields:
+            value = slide[field]
+
+            if (
+                not isinstance(value, str)
+                or not value.strip()
+            ):
+                raise RuntimeError(
+                    f"{field} must be a non-empty string "
+                    f"on slide {slide['slide_number']}."
+                )
+
+    if slides[0]["role"] != "opening":
+        raise RuntimeError(
+            "Revised Slide 1 must have role 'opening'."
+        )
+
+    if slides[-1]["role"] != "synthesis":
+        raise RuntimeError(
+            f"Revised Slide {total_slides} "
+            "must have role 'synthesis'."
+        )
+
+
 def revise_storyline(
     topic_analysis: dict,
     storyline: dict,
     critique: dict
 ) -> dict:
 
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is missing from .env file."
-        )
-
-    client = genai.Client(
-        api_key=api_key
+    _validate_reviser_input(
+        topic_analysis,
+        storyline,
+        critique
     )
 
-    total_slides = storyline.get("total_slides")
-
-    if not total_slides:
-        raise RuntimeError(
-            "Storyline does not contain total_slides."
-        )
+    total_slides = storyline["total_slides"]
 
     topic_json = json.dumps(
         topic_analysis,
@@ -185,6 +479,8 @@ REVISION RULES:
 15. Every slide must still have exactly one primary core message.
 
 16. The revised narrative must continue answering the original core question.
+
+17. Preserve the exact top-level topic value from the current storyline.
 """
 
     try:
@@ -192,116 +488,22 @@ REVISION RULES:
             "[STORYLINE REVISER] Revising storyline..."
         )
 
-        max_retries = 4
-        response = None
-
-        for attempt in range(
-            1,
-            max_retries + 1
-        ):
-            try:
-                print(
-                    f"[STORYLINE REVISER] API attempt "
-                    f"{attempt}/{max_retries}"
-                )
-
-                response = client.models.generate_content(
-                    model=MODEL,
-                    contents=user_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=STORYLINE_REVISER_PROMPT,
-                        response_mime_type="application/json",
-                        temperature=0.15,
-                        max_output_tokens=4000
-                    )
-                )
-
-                break
-
-            except Exception as api_error:
-                error_text = str(api_error)
-
-                temporary_error = (
-                    "503" in error_text
-                    or "UNAVAILABLE" in error_text
-                    or "high demand" in error_text.lower()
-                    or "429" in error_text
-                    or "RESOURCE_EXHAUSTED" in error_text
-                )
-
-                if (
-                    not temporary_error
-                    or attempt == max_retries
-                ):
-                    raise
-
-                wait_seconds = 5 * attempt
-
-                print(
-                    "[STORYLINE REVISER] "
-                    f"Temporary Gemini error. "
-                    f"Retrying in {wait_seconds} seconds..."
-                )
-
-                time.sleep(wait_seconds)
-
-        if response is None:
-            raise RuntimeError(
-                "Storyline Reviser did not receive a response."
-            )
-
-        if not response.text:
-            raise RuntimeError(
-                "Storyline Reviser returned an empty response."
-            )
+        response_text = generate_json(
+            system_prompt=STORYLINE_REVISER_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.15,
+            max_output_tokens=4000,
+            caller_name="STORYLINE REVISER"
+        )
 
         revised_storyline = _extract_json(
-            response.text
+            response_text
         )
 
-        slides = revised_storyline.get("slides")
-
-        if not isinstance(slides, list):
-            raise RuntimeError(
-                "Storyline Reviser returned invalid slides."
-            )
-
-        if len(slides) != total_slides:
-            raise RuntimeError(
-                "Storyline Reviser violated slide count. "
-                f"Expected {total_slides}, "
-                f"received {len(slides)}."
-            )
-
-        expected_numbers = list(
-            range(
-                1,
-                total_slides + 1
-            )
+        _validate_revised_storyline(
+            revised_storyline,
+            storyline
         )
-
-        actual_numbers = [
-            slide.get("slide_number")
-            for slide in slides
-        ]
-
-        if actual_numbers != expected_numbers:
-            raise RuntimeError(
-                "Storyline Reviser returned invalid numbering. "
-                f"Expected {expected_numbers}, "
-                f"received {actual_numbers}."
-            )
-
-        if slides[0].get("role") != "opening":
-            raise RuntimeError(
-                "Revised Slide 1 must have role 'opening'."
-            )
-
-        if slides[-1].get("role") != "synthesis":
-            raise RuntimeError(
-                f"Revised Slide {total_slides} "
-                "must have role 'synthesis'."
-            )
 
         print(
             "[STORYLINE REVISER] "
@@ -309,6 +511,14 @@ REVISION RULES:
         )
 
         return revised_storyline
+
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "Storyline Reviser returned malformed JSON."
+        ) from error
+
+    except GeminiError:
+        raise
 
     except Exception as error:
         print(
