@@ -1,16 +1,10 @@
 import json
-import os
 import re
 
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-
-
-load_dotenv()
-
-
-MODEL = "gemini-3.5-flash"
+from ai_engine.gemini_client import (
+    GeminiError,
+    generate_json,
+)
 
 
 STORYLINE_PLANNER_PROMPT = """
@@ -75,7 +69,6 @@ Return ONLY valid JSON.
 
 
 def _extract_json(text: str) -> dict:
-
     cleaned = re.sub(
         r"^```(?:json)?|```$",
         "",
@@ -86,25 +79,191 @@ def _extract_json(text: str) -> dict:
     return json.loads(cleaned)
 
 
+def _validate_topic_analysis_input(
+    topic_analysis: dict
+) -> None:
+
+    if not isinstance(
+        topic_analysis,
+        dict
+    ):
+        raise TypeError(
+            "topic_analysis must be a dictionary."
+        )
+
+    required_fields = [
+        "topic",
+        "presentation_goal",
+        "core_question",
+        "core_concepts"
+    ]
+
+    missing_fields = [
+        field
+        for field in required_fields
+        if field not in topic_analysis
+    ]
+
+    if missing_fields:
+        raise ValueError(
+            "Storyline Planner received incomplete "
+            "topic analysis. "
+            f"Missing fields: {missing_fields}"
+        )
+
+    if not isinstance(
+        topic_analysis["core_concepts"],
+        list
+    ):
+        raise TypeError(
+            "topic_analysis core_concepts "
+            "must be a list."
+        )
+
+
+def _validate_storyline(
+    storyline: dict,
+    total_slides: int
+) -> None:
+
+    required_fields = [
+        "topic",
+        "total_slides",
+        "narrative_thesis",
+        "story_arc",
+        "slides"
+    ]
+
+    missing_fields = [
+        field
+        for field in required_fields
+        if field not in storyline
+    ]
+
+    if missing_fields:
+        raise RuntimeError(
+            "Storyline Planner returned invalid JSON. "
+            f"Missing fields: {missing_fields}"
+        )
+
+    if storyline["total_slides"] != total_slides:
+        raise RuntimeError(
+            "Storyline metadata violated slide count. "
+            f"Expected {total_slides}, "
+            f"received {storyline['total_slides']}."
+        )
+
+    slides = storyline["slides"]
+
+    if not isinstance(
+        slides,
+        list
+    ):
+        raise RuntimeError(
+            "Storyline Planner returned invalid slides."
+        )
+
+    if len(slides) != total_slides:
+        raise RuntimeError(
+            "Storyline Planner violated slide count. "
+            f"Expected {total_slides}, "
+            f"received {len(slides)}."
+        )
+
+    expected_numbers = list(
+        range(
+            1,
+            total_slides + 1
+        )
+    )
+
+    actual_numbers = [
+        slide.get("slide_number")
+        if isinstance(slide, dict)
+        else None
+        for slide in slides
+    ]
+
+    if actual_numbers != expected_numbers:
+        raise RuntimeError(
+            "Storyline Planner returned invalid "
+            "slide numbering. "
+            f"Expected {expected_numbers}, "
+            f"received {actual_numbers}."
+        )
+
+    for slide in slides:
+        required_slide_fields = [
+            "slide_number",
+            "role",
+            "purpose",
+            "core_message",
+            "concepts_used",
+            "transition_to_next"
+        ]
+
+        missing_slide_fields = [
+            field
+            for field in required_slide_fields
+            if field not in slide
+        ]
+
+        if missing_slide_fields:
+            raise RuntimeError(
+                "Storyline slide "
+                f"{slide.get('slide_number')} "
+                "is incomplete. "
+                f"Missing fields: {missing_slide_fields}"
+            )
+
+        if not isinstance(
+            slide["concepts_used"],
+            list
+        ):
+            raise RuntimeError(
+                "concepts_used must be a list on "
+                f"slide {slide['slide_number']}."
+            )
+
+        if not slide["core_message"].strip():
+            raise RuntimeError(
+                "Every slide must contain a core message. "
+                f"Slide {slide['slide_number']} is empty."
+            )
+
+    if slides[0]["role"] != "opening":
+        raise RuntimeError(
+            "Slide 1 must have the opening role."
+        )
+
+    if slides[-1]["role"] != "synthesis":
+        raise RuntimeError(
+            f"Slide {total_slides} must have "
+            "the synthesis role."
+        )
+
+
 def plan_storyline(
     topic_analysis: dict,
     total_slides: int
 ) -> dict:
 
+    if not isinstance(
+        total_slides,
+        int
+    ):
+        raise TypeError(
+            "total_slides must be an integer."
+        )
+
     if total_slides < 3:
         raise ValueError(
-            "A presentation must contain at least 3 total slides."
+            "A presentation must contain "
+            "at least 3 total slides."
         )
 
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is missing from .env file."
-        )
-
-    client = genai.Client(
-        api_key=api_key
+    _validate_topic_analysis_input(
+        topic_analysis
     )
 
     topic_json = json.dumps(
@@ -207,86 +366,44 @@ Examples:
 """
 
     try:
-
         print(
             "[STORYLINE PLANNER] Building narrative..."
         )
 
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=STORYLINE_PLANNER_PROMPT,
-                response_mime_type="application/json",
-                temperature=0.3,
-                max_output_tokens=3500
-            )
+        response_text = generate_json(
+            system_prompt=STORYLINE_PLANNER_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.3,
+            max_output_tokens=3500,
+            caller_name="STORYLINE PLANNER"
         )
-
-        if not response.text:
-            raise RuntimeError(
-                "Storyline Planner returned an empty response."
-            )
 
         storyline = _extract_json(
-            response.text
+            response_text
         )
 
-        slides = storyline.get(
-            "slides"
+        _validate_storyline(
+            storyline,
+            total_slides
         )
-
-        if not isinstance(
-            slides,
-            list
-        ):
-            raise RuntimeError(
-                "Storyline Planner returned invalid slides."
-            )
-
-        if len(slides) != total_slides:
-            raise RuntimeError(
-                "Storyline Planner violated slide count. "
-                f"Expected {total_slides}, received {len(slides)}."
-            )
-
-        expected_numbers = list(
-            range(
-                1,
-                total_slides + 1
-            )
-        )
-
-        actual_numbers = [
-            slide.get("slide_number")
-            for slide in slides
-        ]
-
-        if actual_numbers != expected_numbers:
-            raise RuntimeError(
-                "Storyline Planner returned invalid slide numbering. "
-                f"Expected {expected_numbers}, received {actual_numbers}."
-            )
-
-        if slides[0].get("role") != "opening":
-            raise RuntimeError(
-                "Slide 1 must have the opening role."
-            )
-
-        if slides[-1].get("role") != "synthesis":
-            raise RuntimeError(
-                f"Slide {total_slides} must have the synthesis role."
-            )
 
         print(
             "[STORYLINE PLANNER] "
-            f"Created exactly {len(slides)} slides."
+            f"Created exactly "
+            f"{len(storyline['slides'])} slides."
         )
 
         return storyline
 
-    except Exception as error:
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "Storyline Planner returned malformed JSON."
+        ) from error
 
+    except GeminiError:
+        raise
+
+    except Exception as error:
         print(
             "\n========== STORYLINE PLANNER ERROR =========="
         )
