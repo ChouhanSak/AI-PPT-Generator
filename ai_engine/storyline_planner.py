@@ -194,13 +194,17 @@ def _validate_storyline(
 
     for slide in slides:
         required_slide_fields = [
-            "slide_number",
-            "role",
-            "purpose",
-            "core_message",
-            "concepts_used",
-            "transition_to_next"
-        ]
+        "slide_number",
+        "role",
+        "purpose",
+        "core_message",
+        "concepts_used",
+    ]
+
+        if slide["slide_number"] != total_slides:
+            required_slide_fields.append(
+                "transition_to_next"
+        )
 
         missing_slide_fields = [
             field
@@ -225,22 +229,31 @@ def _validate_storyline(
                 f"slide {slide['slide_number']}."
             )
 
-        if not slide["core_message"].strip():
+        if not isinstance(
+            slide["core_message"],
+            str
+        ) or not slide["core_message"].strip():
             raise RuntimeError(
                 "Every slide must contain a core message. "
                 f"Slide {slide['slide_number']} is empty."
             )
 
-    if slides[0]["role"] != "opening":
-        raise RuntimeError(
-            "Slide 1 must have the opening role."
-        )
+        if slide["slide_number"] == total_slides:
+            slide.setdefault(
+                "transition_to_next",
+                ""
+            )
 
-    if slides[-1]["role"] != "synthesis":
-        raise RuntimeError(
-            f"Slide {total_slides} must have "
-            "the synthesis role."
-        )
+        if slides[0]["role"] != "opening":
+            raise RuntimeError(
+                "Slide 1 must have the opening role."
+            )
+
+        if slides[-1]["role"] != "synthesis":
+            raise RuntimeError(
+                f"Slide {total_slides} must have "
+                "the synthesis role."
+            )
 
 
 def plan_storyline(
@@ -356,7 +369,11 @@ Examples:
 
 13. Do not introduce a business or investor perspective unless present in the topic analysis.
 
-14. Every transition_to_next must explain the logical need for the following slide.
+14. Slides 1 through {total_slides - 1} must include transition_to_next
+    explaining the logical need for the following slide.
+
+    The final synthesis slide has no following slide, so its
+    transition_to_next must be an empty string "".
 
 15. The final slide must synthesize the presentation rather than simply say "Thank You".
 

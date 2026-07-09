@@ -253,15 +253,11 @@ def _validate_revised_storyline(
 
     total_slides = original_storyline["total_slides"]
 
-    if (
-        revised_storyline["total_slides"]
-        != total_slides
-    ):
+    if revised_storyline["total_slides"] != total_slides:
         raise RuntimeError(
             "Storyline Reviser changed total_slides. "
             f"Expected {total_slides}, "
-            f"received "
-            f"{revised_storyline['total_slides']}."
+            f"received {revised_storyline['total_slides']}."
         )
 
     if not isinstance(
@@ -308,6 +304,7 @@ def _validate_revised_storyline(
         )
 
     for slide in slides:
+
         if not isinstance(slide, dict):
             raise RuntimeError(
                 "Every revised slide must be an object."
@@ -317,12 +314,6 @@ def _validate_revised_storyline(
             REQUIRED_SLIDE_FIELDS
             - set(slide.keys())
         )
-        if slide["role"] not in ALLOWED_SLIDE_ROLES:
-            raise RuntimeError(
-                "Storyline Reviser returned an invalid slide role. "
-                f"Slide {slide['slide_number']} "
-                f"has role '{slide['role']}'."
-            )
 
         if missing_slide_fields:
             raise RuntimeError(
@@ -330,6 +321,13 @@ def _validate_revised_storyline(
                 f"Slide {slide.get('slide_number')} "
                 f"is missing fields: "
                 f"{sorted(missing_slide_fields)}"
+            )
+
+        if slide["role"] not in ALLOWED_SLIDE_ROLES:
+            raise RuntimeError(
+                "Storyline Reviser returned an invalid slide role. "
+                f"Slide {slide['slide_number']} "
+                f"has role '{slide['role']}'."
             )
 
         if not isinstance(
@@ -344,11 +342,11 @@ def _validate_revised_storyline(
         text_fields = [
             "role",
             "purpose",
-            "core_message",
-            "transition_to_next"
+            "core_message"
         ]
 
         for field in text_fields:
+
             value = slide[field]
 
             if (
@@ -360,6 +358,28 @@ def _validate_revised_storyline(
                     f"on slide {slide['slide_number']}."
                 )
 
+        transition_to_next = slide[
+            "transition_to_next"
+        ]
+
+        if not isinstance(
+            transition_to_next,
+            str
+        ):
+            raise RuntimeError(
+                "transition_to_next must be a string "
+                f"on slide {slide['slide_number']}."
+            )
+
+        if (
+            slide["slide_number"] < total_slides
+            and not transition_to_next.strip()
+        ):
+            raise RuntimeError(
+                "transition_to_next must be a non-empty string "
+                f"on slide {slide['slide_number']}."
+            )
+
     if slides[0]["role"] != "opening":
         raise RuntimeError(
             "Revised Slide 1 must have role 'opening'."
@@ -370,7 +390,6 @@ def _validate_revised_storyline(
             f"Revised Slide {total_slides} "
             "must have role 'synthesis'."
         )
-
 
 def revise_storyline(
     topic_analysis: dict,
@@ -481,6 +500,10 @@ REVISION RULES:
 16. The revised narrative must continue answering the original core question.
 
 17. Preserve the exact top-level topic value from the current storyline.
+
+18. Every slide except the final synthesis slide must have a non-empty transition_to_next.
+
+19. The final synthesis slide may use an empty string for transition_to_next because no slide follows it.
 """
 
     try:

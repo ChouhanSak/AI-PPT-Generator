@@ -399,6 +399,16 @@ def critique_storyline(
         indent=2
     )
 
+    total_slides = storyline.get(
+        "total_slides",
+        len(
+            storyline.get(
+                "slides",
+                []
+            )
+        )
+    )
+
     user_prompt = f"""
 Evaluate this presentation storyline.
 
@@ -409,6 +419,30 @@ TOPIC ANALYSIS:
 STORYLINE:
 
 {storyline_json}
+
+PRESENTATION CONSTRAINT:
+
+The user explicitly requested exactly {total_slides} slides.
+
+You MUST evaluate the storyline relative to this slide budget.
+
+A short presentation is NOT expected to cover every core concept from
+the topic analysis.
+
+For a 3 to 4 slide presentation:
+- prioritize the central question
+- preserve a clear beginning, explanation, and synthesis
+- allow selective coverage of only the most essential concepts
+- do not penalize omitted secondary concepts merely because the topic is broad
+
+For a 5 to 7 slide presentation:
+- expect moderate conceptual coverage
+- prioritize major mechanisms, stages, or categories
+- minor omissions should normally lead to REVISE, not REJECT
+
+For an 8 to 12 slide presentation:
+- expect broader conceptual coverage
+- important unexplained gaps may reduce the score more significantly
 
 Return JSON matching exactly this structure:
 
@@ -472,6 +506,10 @@ SCORING RULES:
 
 - Every dimension is scored from 0 to 10.
 - overall_score is scored from 0 to 10.
+- Judge conceptual quality relative to the requested {total_slides}-slide budget.
+- Do not lower the score simply because a short deck cannot cover every core concept.
+- Missing secondary concepts are not automatically narrative gaps.
+- Evaluate whether the selected concepts form the strongest possible explanation within the available slide count.
 
 DECISION RULES:
 
@@ -482,21 +520,32 @@ AND no banned phrases detected
 
 REVISE:
 overall_score >= 5
-but improvements are required
+AND the storyline is fundamentally usable
+but targeted improvements are required
 
 REJECT:
-overall_score < 5
-or major topic drift makes the storyline unsuitable
+overall_score < 5 ONLY when the storyline is fundamentally unsuitable
+
+REJECT should normally be reserved for:
+- major topic drift
+- severe factual or conceptual framing failure
+- storyline that does not answer the central topic
+- incoherent narrative progression
+- content aimed at the wrong presentation domain
 
 IMPORTANT:
 
-- Be strict.
+- Limited slide count alone is NEVER a reason to REJECT.
+- Omission of secondary concepts alone is NEVER a reason to REJECT.
+- Prefer REVISE over REJECT when specific corrections can repair the storyline.
+- Do not demand comprehensive topic coverage from a 3-slide deck.
+- Be strict about accuracy, relevance, and narrative logic.
 - Do not reward polished wording if the content is inaccurate.
 - Do not assume a claim is correct because it sounds technical.
 - Detect banned phrases even when capitalization differs.
 - Examine every slide.
 - A synthesis slide may summarize earlier concepts without being marked as repetitive.
-- Do not invent new factual problems merely to criticize something.
+- Do not invent factual problems merely to criticize something.
 """
 
     try:
