@@ -1,0 +1,308 @@
+.floating-card {
+  position: fixed;
+
+  z-index: 1;
+
+  width: 260px;
+  height: 160px;
+
+  border:
+    1px solid rgba(255, 255, 255, 0.07);
+
+  border-radius: 18px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(26, 30, 44, 0.72),
+      rgba(12, 15, 24, 0.5)
+    );
+
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  pointer-events: none;
+
+  overflow: hidden;
+}
+
+.floating-card::before {
+  content: "";
+
+  position: absolute;
+
+  inset: 0;
+
+  background:
+    linear-gradient(
+      120deg,
+      rgba(139, 124, 255, 0.07),
+      transparent 55%
+    );
+
+  pointer-events: none;
+}
+
+.floating-card-left {
+  top: 25%;
+
+  left: -95px;
+
+  transform: rotate(-7deg);
+
+  animation:
+    floatingCardLeft 8s ease-in-out infinite;
+}
+
+.floating-card-right {
+  top: 18%;
+
+  right: -72px;
+
+  transform: rotate(9deg);
+
+  animation:
+    floatingCardRight 10s ease-in-out infinite;
+}
+
+.card-line {
+  position: absolute;
+
+  left: 25px;
+
+  height: 5px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(255, 255, 255, 0.09);
+}
+
+.card-line-one {
+  top: 42px;
+
+  width: 108px;
+
+  background:
+    rgba(164, 151, 255, 0.38);
+}
+
+.card-line-two {
+  top: 64px;
+
+  width: 154px;
+}
+
+.card-line-three {
+  top: 83px;
+
+  width: 130px;
+}
+
+.card-line-four {
+  top: 102px;
+
+  width: 146px;
+}
+
+.chart-line {
+  position: absolute;
+
+  left: 25px;
+  top: 29px;
+
+  width: 90px;
+  height: 5px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(104, 160, 255, 0.3);
+}
+
+.chart-bars {
+  position: absolute;
+
+  left: 26px;
+  right: 26px;
+  bottom: 27px;
+
+  height: 65px;
+
+  display: flex;
+  align-items: flex-end;
+
+  gap: 11px;
+}
+
+.chart-bars span {
+  flex: 1;
+
+  border-radius: 5px 5px 2px 2px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(139, 124, 255, 0.3),
+      rgba(86, 116, 255, 0.1)
+    );
+}
+
+.chart-bars span:nth-child(1) {
+  height: 38%;
+}
+
+.chart-bars span:nth-child(2) {
+  height: 70%;
+}
+
+.chart-bars span:nth-child(3) {
+  height: 51%;
+}
+
+.chart-bars span:nth-child(4) {
+  height: 83%;
+}
+
+.chart-bars span:nth-child(5) {
+  height: 61%;
+}
+
+.footer {
+  min-height: 92px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-top:
+    1px solid rgba(255, 255, 255, 0.06);
+
+  color: #565d6d;
+
+  font-size: 10px;
+}
+
+.footer-engine {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  text-transform: uppercase;
+
+  letter-spacing: 1.8px;
+
+  font-size: 9px;
+}
+
+.footer-engine-dot {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background: var(--accent-light);
+
+  box-shadow:
+    0 0 12px rgba(184, 173, 255, 0.6);
+
+  animation:
+    statusPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes ambientFloatOne {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      scale(1);
+  }
+
+  50% {
+    transform:
+      translate3d(90px, 55px, 0)
+      scale(1.08);
+  }
+}
+
+@keyframes ambientFloatTwo {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      scale(1);
+  }
+
+  50% {
+    transform:
+      translate3d(-80px, -60px, 0)
+      scale(1.1);
+  }
+}
+
+@keyframes statusPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+
+    transform:
+      scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+
+    transform:
+      scale(1.08);
+  }
+}
+
+@keyframes floatingCardLeft {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      rotate(-7deg);
+  }
+
+  50% {
+    transform:
+      translate3d(18px, -20px, 0)
+      rotate(-4deg);
+  }
+}
+
+@keyframes floatingCardRight {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      rotate(9deg);
+  }
+
+  50% {
+    transform:
+      translate3d(-17px, 24px, 0)
+      rotate(6deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .ambient-one,
+  .ambient-two,
+  .status-dot,
+  .footer-engine-dot,
+  .floating-card-left,
+  .floating-card-right {
+    animation: none;
+  }
+}

@@ -2,44 +2,350 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI PPT Generator</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <meta
+    name="description"
+    content="AI-powered presentation intelligence engine."
+  />
+
+  <title>Slide Intelligence</title>
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  />
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  />
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/base.css') }}"
+  />
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/navbar.css') }}"
+  />
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/hero.css') }}"
+  />
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/form.css') }}"
+  />
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/effects.css') }}"
+  />
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/responsive.css') }}"
+  />
 </head>
+
 <body>
-  <div class="card">
-    <h1>AI PPT Generator</h1>
-    <p class="subtitle">Type a title. Get a fully designed, ready-to-edit PowerPoint.</p>
 
-    <form id="ppt-form">
-      <label for="title">Presentation Title</label>
-      <input type="text" id="title" name="title" placeholder="e.g. The Future of Renewable Energy" required />
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
 
-      <div class="row">
-        <div class="field">
-          <label for="num_slides">Content Slides</label>
-          <input type="number" id="num_slides" name="num_slides" min="3" max="12" value="6" />
-        </div>
-        <div class="field">
-          <label for="tone">Tone</label>
-          <select id="tone" name="tone">
-            <option value="confident and clear">Confident &amp; Clear</option>
-            <option value="formal and academic">Formal &amp; Academic</option>
-            <option value="casual and friendly">Casual &amp; Friendly</option>
-            <option value="persuasive and energetic">Persuasive &amp; Energetic</option>
-          </select>
-        </div>
+  <div class="background-grid"></div>
+<div
+  class="floating-card floating-card-left"
+  aria-hidden="true"
+>
+  <span class="card-line card-line-one"></span>
+  <span class="card-line card-line-two"></span>
+  <span class="card-line card-line-three"></span>
+  <span class="card-line card-line-four"></span>
+</div>
+
+<div
+  class="floating-card floating-card-right"
+  aria-hidden="true"
+>
+  <span class="chart-line"></span>
+
+  <div class="chart-bars">
+    <span></span>
+    <span></span>
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+  <main class="page-shell">
+
+    <nav class="navbar">
+
+      <a
+        href="/"
+        class="brand"
+        aria-label="Slide Intelligence home"
+      >
+        <span class="brand-mark">
+          <span></span>
+          <span></span>
+        </span>
+
+        <span class="brand-name">
+          Slide Intelligence
+        </span>
+      </a>
+
+      <div class="engine-status">
+        <span class="status-dot"></span>
+        AI ENGINE
       </div>
 
-      <label for="audience">Audience (optional)</label>
-      <input type="text" id="audience" name="audience" placeholder="e.g. college students, investors, employees" />
+    </nav>
 
-      <button type="submit" id="generate-btn">Generate Presentation</button>
-    </form>
+    <section class="hero">
 
-    <div id="status" class="status"></div>
-  </div>
+      <div class="hero-copy">
 
-  <script src="{{ url_for('static', filename='script.js') }}"></script>
+        <div class="eyebrow">
+          <span class="eyebrow-line"></span>
+          PRESENTATION INTELLIGENCE
+        </div>
+
+        <h1>
+          Present ideas
+          <span>that deserve attention.</span>
+        </h1>
+
+        <p class="hero-description">
+          An AI presentation engine that plans the narrative,
+          critiques the content and directs every slide visually.
+        </p>
+
+        <div class="intelligence-pipeline">
+
+          <div class="pipeline-step">
+            <span class="step-number">01</span>
+
+            <div>
+              <strong>Analyze</strong>
+              <small>Understand the idea</small>
+            </div>
+          </div>
+
+          <span class="pipeline-arrow">→</span>
+
+          <div class="pipeline-step">
+            <span class="step-number">02</span>
+
+            <div>
+              <strong>Structure</strong>
+              <small>Build the narrative</small>
+            </div>
+          </div>
+
+          <span class="pipeline-arrow">→</span>
+
+          <div class="pipeline-step">
+            <span class="step-number">03</span>
+
+            <div>
+              <strong>Refine</strong>
+              <small>Critique and improve</small>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <div class="generator-panel">
+
+        <div class="panel-glow"></div>
+
+        <div class="panel-heading">
+
+          <div>
+            <span class="panel-label">
+              CREATE PRESENTATION
+            </span>
+
+            <h2>
+              What are you presenting?
+            </h2>
+          </div>
+
+          <span class="spark-icon">✦</span>
+
+        </div>
+
+        <form id="ppt-form">
+
+          <div class="form-field primary-field">
+
+            <label for="title">
+              Presentation idea
+            </label>
+
+            <input
+              type="text"
+              id="title"
+              name="title"
+              placeholder="How Neural Networks Learn"
+              autocomplete="off"
+              required
+            />
+
+          </div>
+
+          <div class="form-row">
+
+            <div class="form-field">
+
+              <label for="audience">
+                Audience
+              </label>
+
+              <input
+                type="text"
+                id="audience"
+                name="audience"
+                placeholder="Computer science students"
+                autocomplete="off"
+              />
+
+            </div>
+
+            <div class="form-field slides-field">
+
+              <label for="num_slides">
+                Slides
+              </label>
+
+              <input
+                type="number"
+                id="num_slides"
+                name="num_slides"
+                min="3"
+                max="12"
+                value="6"
+              />
+
+            </div>
+
+          </div>
+
+          <div class="form-field">
+
+            <label for="tone">
+              Presentation tone
+            </label>
+
+            <div class="select-wrapper">
+
+              <select
+                id="tone"
+                name="tone"
+              >
+                <option value="confident and clear">
+                  Confident &amp; Clear
+                </option>
+
+                <option value="formal and academic">
+                  Formal &amp; Academic
+                </option>
+
+                <option value="casual and friendly">
+                  Casual &amp; Friendly
+                </option>
+
+                <option value="persuasive and energetic">
+                  Persuasive &amp; Energetic
+                </option>
+              </select>
+
+            </div>
+
+          </div>
+
+          <button
+            type="submit"
+            id="generate-btn"
+          >
+            <span class="button-text">
+              Generate Presentation
+            </span>
+
+            <span class="button-icon">
+              ✦
+            </span>
+          </button>
+
+        </form>
+
+        <div
+          id="status"
+          class="status"
+          aria-live="polite"
+        ></div>
+
+        <div class="panel-footer">
+
+          <span>
+            Narrative planning
+          </span>
+
+          <span class="footer-dot"></span>
+
+          <span>
+            AI critique
+          </span>
+
+          <span class="footer-dot"></span>
+
+          <span>
+            Visual direction
+          </span>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <footer class="page-footer">
+
+      <p>
+        Built for ideas that need more than a template.
+      </p>
+
+      <div class="footer-engine">
+        <span></span>
+        INTELLIGENCE PIPELINE ACTIVE
+      </div>
+
+    </footer>
+
+  </main>
+
+  <script
+    src="{{ url_for('static', filename='script.js') }}"
+  ></script>
+
 </body>
 </html>
